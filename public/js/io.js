@@ -1,3 +1,5 @@
+
+
 function handleFileSelect(evt, isTypedArray) {
   var f = evt.target.files[0]; // File Object
   // Loop through the FileList and render image files as thumbnails.
@@ -82,7 +84,7 @@ function encodeBytes(pcmData) {
   });
 
   var frames = codec.encode(shorts, true);
-
+  
   //   var reader = new FileReader();
   //   reader.onload = function (e) {
   //     var frames,

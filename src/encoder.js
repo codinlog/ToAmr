@@ -1,109 +1,78 @@
-(function (global) {
 
-var util = AMR.util;
+const AMRParams = {
+    HEADER: [35, 33, 65, 77, 82, 10], WHATSHEADER: "#!AMR\n",
+    /** Decoding modes and its frame sizes (bytes), respectively */
+    AmrModes: {
+        0: 12, 1: 13, 2: 15, 3: 17, 4: 19, 5: 20, 6: 26, 7: 31
+    }
+};
 
+class AMREncoder {
+    constructor(options) {
+        this.frameSize = options.frameSize || 160;
+        this.amrMode = options.amrMode || 5; // MR795 by default
+        this.blockSize = AMRParams.AmrModes[this.amrMode];
+        this.dtx = 0;
+        this.init();
+    }
 
-function AMREncoder(options) {
-	this.params = options;
-	
-	this.mode = options.mode || 5; // MR795 by default
+    init() {
+        /* Create Encoder */
+        this.state = opencoreamr.Encoder_Interface_init(this.dtx);
+        this.input = opencoreamr.allocate(this.frameSize, 'i16', opencoreamr.ALLOC_STATIC);
+        this.buffer = opencoreamr.allocate(this.blockSize, 'i8', opencoreamr.ALLOC_STATIC);
+    }
 
-	this.frame_size = 160;
+    /**
+     * Copy the samples to the input buffer
+     */
+    read(offset, length, data) {
+        let len = offset + length > data.length ? data.length - offset : length;
+        for (let m = offset - 1, k = 0; ++m < offset + len; k += 2) {
+            opencoreamr.setValue(this.input + k, data[m], 'i16');
+        }
+        return len;
+    }
 
-	this.block_size = AMR.modes[this.mode];
+    /* Copy to the output buffer */
+    write(offset, nb, addr) {
+        for (let m = 0, k = offset - 1; ++k < offset + nb; m += 1) {
+            this.output[k] = opencoreamr.getValue(addr + m, "i8");
+        }
+    }
 
-	this.dtx = (options.dtx + 0) || 0;
+    writeHeader() {
+        for (let i = -1; ++i < 6;) {
+            this.output[i] = AMRParams.HEADER[i];
+        }
+    }
+
+    process(pcmData) {
+        let totalPackets = Math.ceil(pcmData.length / this.frameSize);
+        let estimatedSize = this.blockSize * totalPackets;
+        if (!this.output || this.output.length < estimatedSize) {
+            this.output = new Uint8Array(estimatedSize + 6);
+        }
+        this.writeHeader();
+        let outputOffset = 6;
+        for (let offset = 0; offset < pcmData.length;) {
+            /* Frames to the input buffer */
+            let len = this.read(offset, this.frameSize, pcmData);
+            /* Encode the frame */
+            let nb = opencoreamr.Encoder_Interface_Encode(this.state, this.amrMode
+                , this.input, this.buffer, 0);
+            /* Write the size and frame */
+            this.write(outputOffset, nb, this.buffer);
+            outputOffset += nb;
+            offset += len;
+        }
+        return this.output.subarray(0, outputOffset);
+    }
+
+    close() {
+        opencoreamr.Encoder_Interface_exit(this.state);
+    }
 }
 
-AMREncoder.prototype.init = function () {
-	var options = this.options;
-	var ptr = opencoreamr.allocate(1, 'i32', opencoreamr.ALLOC_STACK), ret, encSize;
-
-	/* Create Encoder */
-	this.state = opencoreamr.Encoder_Interface_init(this.dtx);
-
-	this.input = opencoreamr.allocate(this.frame_size, 'i16', opencoreamr.ALLOC_STATIC);	
-	this.buffer = opencoreamr.allocate(this.block_size, 'i8', opencoreamr.ALLOC_STATIC);
-}
-
-/**
-  * Copy the samples to the input buffer
-  */
-AMREncoder.prototype.read = function (offset, length, data) {
-	var input_addr = this.input
-	  , len = offset + length > data.length ? data.length - offset : length;
-
-	for (var m=offset-1, k=0; ++m < offset+len; k+=2){
-		opencoreamr.setValue(input_addr+k, data[m], 'i16');
-	}
-
-	return len;
-}
-
-AMREncoder.prototype.writeMagicNumber = function () {
-	for (var i=-1; ++i<6; ) {
-		this.output[i] = AMR.MAGIC_NUMBER[i];
-	}
-}
-
-/* Copy to the output buffer */
-AMREncoder.prototype.write = function (offset, nb, addr) {	
-	var bits;
-  	for (var m=0, k=offset-1; ++k<offset+nb; m+=1) {
-  		bits = opencoreamr.getValue(addr+m, "i8");
-  		this.output[k] = bits;
-  	}  	
-}
-
-AMREncoder.prototype.process = function (pcmdata) {
-	benchmark && console.time('encode');
-	var output_offset = 0, offset = 0, len, nb, err, tm_str
-	  , benchmark = !!this.benchmark	  
-	  , total_packets = Math.ceil(pcmdata.length / this.frame_size)
-	  , estimated_size = this.block_size * total_packets
-	  , buffer_len_ptr = opencoreamr.allocate(1, 'i32', opencoreamr.ALLOC_STACK);
-
-	if (!this.output || this.output.length < estimated_size) {
-		this.output = new Uint8Array(estimated_size + 6);
-	}
-
-	this.writeMagicNumber();
-	output_offset += 6;
-
-	var bits_addr = this.bits
-	  , input_addr = this.input
-	  , buffer_addr = this.buffer
-	  , state_addr = this.state;
-	
-	while (offset < pcmdata.length) {
-		benchmark && console.time('encode_packet_offset_'+offset);
-		
-		/* Frames to the input buffer */
-		len = this.read(offset, this.frame_size, pcmdata);	
-		
-    	/* Encode the frame */
-    	nb = opencoreamr.Encoder_Interface_Encode(this.state, this.mode
-	    	, input_addr, buffer_addr, 0);
-
-    	/* Write the size and frame */
-    	this.write(output_offset, nb, buffer_addr);
-
-    	benchmark && console.timeEnd('encode_packet_offset_'+offset);
-
-    	output_offset += nb;
-    	offset += len;
-	}
-
-	benchmark && console.timeEnd('encode');
-
-	return this.output.subarray(0, output_offset);
-}
-
-
-AMREncoder.prototype.close = function () {
-	opencoreamr.Encoder_Interface_exit(this.state);
-}
-
-global["AMREncoder"] = AMREncoder;
-
-}(this));
+// export default AMREncoder;
+this.AMREncoder = AMREncoder;
