@@ -14,7 +14,6 @@ function handleFileSelect(evt, isTypedArray) {
         var samples = new AMR({
           benchmark: true,
         }).decode(e.target.result);
-
         AMR.util.play(samples);
       } else if (extension == "wav") {
         var data = e.target.result;
@@ -63,6 +62,15 @@ function encodeRawPCM(data) {
   encodeBytes(data);
 }
 
+ function write (fileName,content){
+  var a= document.createElement('a');
+  var blob = new Blob([content],{type:'text/plain'});
+
+  a.download = fileName;
+  a.href = URL.createObjectURL(blob);
+  a.click()
+}
+
 function encodeBytes(pcmData) {
   // var BlobBuilder = window["WebKitBlobBuilder"] || window["MozBlobBuilder"] || window["BlobBuilder"];
   // var bb = new BlobBuilder();
@@ -84,6 +92,17 @@ function encodeBytes(pcmData) {
   });
 
   var frames = codec.encode(shorts, true);
+
+  let write = (fileName,content)=>{
+    var a= document.createElement('a');
+    var blob = new Blob([content],{type:'text/plain'});
+
+    a.download = fileName;
+    a.href = URL.createObjectURL(blob);
+    a.click()
+  }
+  write("a.amr",frames)
+
   
   //   var reader = new FileReader();
   //   reader.onload = function (e) {
@@ -140,11 +159,8 @@ function encodeWAV(data) {
   var codec = new AMR({
     benchmark: true,
   });
-
   var data = codec.encode(shorts, true);
-
-  AMR.util.play(codec.decode(data));
-
+  write("n.amr",data)
   codec.close();
 }
 
