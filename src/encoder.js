@@ -18,6 +18,7 @@ class AMREncoder {
 
     init() {
         /* Create Encoder */
+        console.log(opencoreamr)
         this.state = opencoreamr.Encoder_Interface_init(this.dtx);
         this.input = opencoreamr.allocate(this.frameSize, 'i16', opencoreamr.ALLOC_STATIC);
         this.buffer = opencoreamr.allocate(this.blockSize, 'i8', opencoreamr.ALLOC_STATIC);

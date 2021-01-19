@@ -20,5 +20,4 @@ class AMR {
     }
 }
 
-// export default ARM;
 this.AMR = AMR;
